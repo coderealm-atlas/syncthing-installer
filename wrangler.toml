@@ -1,0 +1,7 @@
+
+name = "syncthing-installer"
+main = "src/worker.ts"
+compatibility_date = "2026-03-20"
+
+[vars]
+MIRROR_BASE_URL = "https://download.example.com/syncthing"

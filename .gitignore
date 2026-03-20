@@ -1,0 +1,14 @@
+node_modules/
+.wrangler/
+.dev.vars
+.env
+.env.*
+
+dist/
+coverage/
+
+sync/data/
+sync/config/env
+
+.DS_Store
+*.log
