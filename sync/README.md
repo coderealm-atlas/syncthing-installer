@@ -10,10 +10,12 @@
 
 建议流程：
 
-1. 用 `bin/sync-assets.sh` 拉取 GitHub Release 资源到本地目录
-2. 用 `bin/deploy-rsync.sh` 将本地目录同步到中国服务器
+1. 用 `bin/fetch-assets.sh` 拉取 GitHub Release 资源到本地目录
+2. 用 `bin/sync-assets.sh` 将本地目录同步到中国服务器
 
 当前实现优先支持 `rsync over SSH`，适合“先下载到目录，再发布到中国服务器”的流程。
+
+另外也提供了一个面向 Ubuntu 24 的部署脚本，用于把整个 `sync/` 目录上传到远端服务器，并安装 `systemd service + timer`。
 
 ## 当前能力
 
@@ -41,6 +43,11 @@
 - `DRY_RUN=1`：只预览 `rsync` 变更，不真正上传
 - `PUBLISH_LAYOUT=versioned`：发布为固定结构，包含 `releases/` 和 `latest/`
 - `STAGE_ROOT`：可选，指定本地 staging 目录；不设置时自动用临时目录
+- `SYNC_DEPLOY_HOST` / `SYNC_DEPLOY_USER` / `SYNC_DEPLOY_PORT`：部署 sync 程序到 Ubuntu 24 的 SSH 目标
+- `SYNC_DEPLOY_BASE_DIR`：远端安装目录
+- `SYNC_SYSTEMD_NAME_PREFIX`：systemd service/timer 名称前缀
+- `SYNC_RUN_USER` / `SYNC_RUN_GROUP`：远端执行同步任务的用户和组
+- `SYNC_TIMER_ON_CALENDAR`：systemd timer 的计划，例如 `hourly` 或 `*-*-* 03:00:00`
 
 ## 产出文件
 
@@ -50,7 +57,7 @@
 
 ## 发布目录结构
 
-当前 `deploy-rsync.sh` 会先构造本地 staging 目录，再整体同步到远端。默认结构如下：
+当前 `sync-assets.sh` 会先构造本地 staging 目录，再整体同步到远端。默认结构如下：
 
 ```text
 manifest.json
@@ -74,9 +81,9 @@ latest/
 
 ```bash
 cp sync/config/env.example sync/config/env
+./sync/bin/fetch-assets.sh
+DRY_RUN=1 ./sync/bin/sync-assets.sh
 ./sync/bin/sync-assets.sh
-DRY_RUN=1 ./sync/bin/deploy-rsync.sh
-./sync/bin/deploy-rsync.sh
 ```
 
 默认 `SYNC_PROFILE=windows`，会只同步 Windows zip。
@@ -85,3 +92,43 @@ DRY_RUN=1 ./sync/bin/deploy-rsync.sh
 
 - 把 `SYNC_PROFILE=all`
 - 或者自定义 `ASSET_MATCH`
+
+## Ubuntu 24 部署
+
+当前只针对 Ubuntu 24，部署脚本会完成三件事：
+
+1. 上传整个 `sync/` 目录到远端服务器
+2. 上传实际运行用的 `config/env`
+3. 安装并启用 `systemd service + timer`
+
+另外，脚本会在远端自动检查并安装缺失依赖：
+
+- `rsync`
+- `curl`
+- `jq`
+
+执行方式：
+
+```bash
+cp sync/config/env.example sync/config/env
+# 编辑 sync/config/env，填写部署和运行参数
+./sync/bin/deploy-sync-ubuntu24.sh
+```
+
+部署完成后，远端会安装：
+
+- `${SYNC_SYSTEMD_NAME_PREFIX}.service`
+- `${SYNC_SYSTEMD_NAME_PREFIX}.timer`
+
+脚本在部署结束后还会自动输出：
+
+- `systemctl status <service>`
+- `systemctl status <timer>`
+- `systemctl list-timers <timer>`
+- 最近 20 行 service 日志
+
+手动触发一次同步：
+
+```bash
+ssh deploy@your-server 'sudo systemctl start syncthing-installer-sync.service'
+```

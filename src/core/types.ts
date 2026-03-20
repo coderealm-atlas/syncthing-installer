@@ -1,5 +1,6 @@
 export interface Env {
   MIRROR_BASE_URL?: string
+  STATS_COUNTER?: DurableObjectNamespace
 }
 
 export type PlatformFamily = "windows" | "linux" | "macos"

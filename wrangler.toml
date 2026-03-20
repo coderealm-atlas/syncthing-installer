@@ -5,3 +5,11 @@ compatibility_date = "2026-03-20"
 
 [vars]
 MIRROR_BASE_URL = "https://download.example.com/syncthing"
+
+[[durable_objects.bindings]]
+name = "STATS_COUNTER"
+class_name = "StatsCounter"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["StatsCounter"]
