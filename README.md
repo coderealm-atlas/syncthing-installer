@@ -52,19 +52,21 @@ irm https://i.cjj365.cc/syncthing/install.ps1 | iex
 
 ## 参数
 
-version - 指定版本  
-platform - 二进制平台，例如 windows-amd64、linux-amd64、macos-universal  
-source - 下载源，可选 github 或 mirror  
-dir - 安装目录  
+```text
+version - 指定版本
+platform - 二进制平台，例如 windows-amd64、linux-amd64、macos-universal
+source - 下载源，可选 github 或 mirror
+dir - 安装目录
 task - 是否创建计划任务，1 表示创建，0 表示不创建
 open - 安装完成后是否自动打开 Web UI，1 表示打开，0 表示不打开
-service_name - 仅在 `mode=service` 时使用，自定义 Windows service 名称
-service_user - 仅在 `mode=service` 时使用，指定运行服务的 Windows 账号；脚本会交互式提示输入密码
-service_log - 仅在 `mode=service` 时使用，指定 service 输出日志文件路径
-service_create_user - 仅在 `mode=service` 时使用，1 表示自动创建本地低权限服务账号
-service_paths - 仅在 `mode=service` 时使用，用分号分隔多个需要授予服务账号写权限的数据目录
-variant - 平台变体，例如 win10、win11、debian、ubuntu、suse  
-mode - 安装模式，当前默认 `default`
+service_name - 仅在 mode=service 时使用，自定义 Windows service 名称
+service_user - 仅在 mode=service 时使用，指定运行服务的 Windows 账号；脚本会交互式提示输入密码
+service_log - 仅在 mode=service 时使用，指定 service 输出日志文件路径
+service_create_user - 仅在 mode=service 时使用，1 表示自动创建本地低权限服务账号
+service_paths - 仅在 mode=service 时使用，用分号分隔多个需要授予服务账号写权限的数据目录
+variant - 平台变体，例如 win10、win11、debian、ubuntu、suse
+mode - 安装模式，当前默认 default
+```
 
 当 `source=mirror` 时，Worker 会优先读取镜像站发布的 `latest.json`。如果请求里没有显式指定 `version`，下载链接会优先使用镜像站稳定的 `latest/` 路径；指定了 `version` 时则使用 `releases/<version>/`。
 
