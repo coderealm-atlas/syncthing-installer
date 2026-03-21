@@ -21,7 +21,7 @@ export async function buildInstallerScript(request: InstallRequest, env?: Env): 
   throw new Error("Unknown installer")
 }
 
-export async function getLatestVersion(installer: string, sourceName = "github", env?: Env): Promise<string> {
+export async function getLatestVersion(installer: string, sourceName = "mirror", env?: Env): Promise<string> {
   if (installer === "syncthing") {
     return getSyncthingLatestVersion(sourceName, env)
   }

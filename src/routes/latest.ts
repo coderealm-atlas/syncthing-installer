@@ -7,7 +7,7 @@ export async function handleLatestRequest(request: Request, installer: string, e
     return textResponse("Unknown installer", 404)
   }
 
-  const sourceName = new URL(request.url).searchParams.get("source") || "github"
+  const sourceName = new URL(request.url).searchParams.get("source") || "mirror"
 
   try {
     const version = await getLatestVersion(installer, sourceName, env)

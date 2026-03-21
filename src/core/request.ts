@@ -27,6 +27,7 @@ export function parseInstallRequest(
   const url = new URL(request.url)
   const platform = url.searchParams.get("platform") || "windows-amd64"
   const platformFamily = resolvePlatformFamily(platform)
+  const mode = url.searchParams.get("mode") || "default"
 
   if (!platformFamily) {
     return null
@@ -37,9 +38,9 @@ export function parseInstallRequest(
     action,
     platform,
     platformFamily,
-    sourceName: url.searchParams.get("source") || "github",
+    sourceName: url.searchParams.get("source") || "mirror",
     version: url.searchParams.get("version") || undefined,
-    installDir: url.searchParams.get("dir") || defaultInstallDir(platformFamily),
+    installDir: url.searchParams.get("dir") || defaultInstallDir(platformFamily, mode),
     createTask: url.searchParams.get("task") !== "0",
     openBrowser: url.searchParams.get("open") !== "0",
     serviceName: url.searchParams.get("service_name") || undefined,
@@ -51,7 +52,7 @@ export function parseInstallRequest(
       .map((item) => item.trim())
       .filter(Boolean),
     variant: url.searchParams.get("variant") || defaultVariant(platformFamily),
-    mode: url.searchParams.get("mode") || "default"
+    mode
   }
 }
 
@@ -79,12 +80,12 @@ function resolvePlatformFamily(platform: string): PlatformFamily | null {
   return null
 }
 
-function defaultInstallDir(platformFamily: PlatformFamily): string {
+function defaultInstallDir(platformFamily: PlatformFamily, mode: string): string {
   switch (platformFamily) {
     case "windows":
       return "C:\\\\Syncthing"
     case "linux":
-      return "/opt/syncthing"
+      return mode === "service" ? "/usr/local/lib/syncthing" : "$HOME/.local/lib/syncthing"
     case "macos":
       return "/Applications/Syncthing"
   }
@@ -95,7 +96,7 @@ function defaultVariant(platformFamily: PlatformFamily): string {
     case "windows":
       return "win11"
     case "linux":
-      return "ubuntu"
+      return "linux"
     case "macos":
       return "darwin"
   }

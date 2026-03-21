@@ -1,11 +1,9 @@
 import { InstallRequest, PlatformRuntime, PlatformVariantConfig } from "../../../../../core/types"
 import { resolveMode } from "../../modes"
 import { generateLinuxShell } from "./common/shell"
-import { debianVariant } from "./variants/debian"
-import { suseVariant } from "./variants/suse"
-import { ubuntuVariant } from "./variants/ubuntu"
+import { genericLinuxVariant } from "./variants/generic"
 
-const linuxVariants: PlatformVariantConfig[] = [debianVariant, ubuntuVariant, suseVariant]
+const linuxVariants: PlatformVariantConfig[] = [genericLinuxVariant]
 
 export function resolveLinuxRuntime(request: InstallRequest): PlatformRuntime {
   const variant = resolveLinuxVariant(request.variant)
@@ -17,6 +15,9 @@ export function resolveLinuxRuntime(request: InstallRequest): PlatformRuntime {
       return generateLinuxShell({
         downloadURL,
         installDir: request.installDir,
+        openBrowser: request.openBrowser,
+        modeName: mode.name,
+        serviceUser: request.serviceUser,
         variantLabel: `${variant.label} / ${mode.label}`
       })
     }
@@ -28,5 +29,5 @@ function resolveLinuxVariant(name: string): PlatformVariantConfig {
 
   return linuxVariants.find((variant) => {
     return variant.name === normalizedName || variant.aliases?.includes(normalizedName)
-  }) || ubuntuVariant
+  }) || genericLinuxVariant
 }

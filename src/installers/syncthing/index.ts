@@ -29,7 +29,7 @@ export async function buildSyncthingInstallScript(request: InstallRequest, env?:
   return runtime.buildScript(downloadURL, request)
 }
 
-export async function getSyncthingLatestVersion(sourceName = "github", env?: Env): Promise<string> {
+export async function getSyncthingLatestVersion(sourceName = "mirror", env?: Env): Promise<string> {
   const sources = getSyncthingInstallerConfig(env).sources
   const source = sources[sourceName]
 
