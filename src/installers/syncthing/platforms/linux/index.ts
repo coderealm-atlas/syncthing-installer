@@ -15,6 +15,9 @@ export function resolveLinuxRuntime(request: InstallRequest): PlatformRuntime {
       return generateLinuxShell({
         downloadURL,
         installDir: request.installDir,
+        guiListenAddress: request.guiListenAddress,
+        guiURL: request.guiURL,
+        tailscaleMode: request.tailscaleMode,
         openBrowser: request.openBrowser,
         modeName: mode.name,
         serviceUser: request.serviceUser,

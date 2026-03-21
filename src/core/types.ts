@@ -3,7 +3,7 @@ export interface Env {
   STATS_COUNTER?: DurableObjectNamespace
 }
 
-export type PlatformFamily = "windows" | "linux" | "macos"
+export type PlatformFamily = "windows" | "linux" | "macos" | "freebsd"
 
 export type SourceConfig = {
   api?: string
@@ -22,6 +22,9 @@ export type InstallRequest = {
   action: string
   platform: string
   platformFamily: PlatformFamily
+  guiListenAddress: string
+  guiURL: string
+  tailscaleMode: boolean
   sourceName: string
   version?: string
   installDir: string

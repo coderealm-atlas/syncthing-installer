@@ -10,6 +10,9 @@ type WindowsPowerShellOptions = {
   nssmZipUrl: string
   installDir: string
   createTask: boolean
+  guiListenAddress: string
+  guiURL: string
+  tailscaleMode: boolean
   openBrowser: boolean
   modeName: string
   serviceName?: string
@@ -40,9 +43,58 @@ $ErrorActionPreference = "Stop"
 $installDir = "${options.installDir}"
 $homeDir = ${windowsHomeDirExpression()}
 $url = "${options.downloadURL}"
-$guiUrl = "http://127.0.0.1:8384/"
+$defaultGuiListenAddress = "${escapePowerShellString(options.guiListenAddress)}"
+$defaultGuiUrl = "${escapePowerShellString(options.guiURL)}"
+$tailscaleMode = ${options.tailscaleMode ? "$true" : "$false"}
 $openBrowser = ${options.openBrowser ? "$true" : "$false"}
 $serviceName = "${escapePowerShellString(options.serviceName || "Syncthing")}"
+
+function Resolve-GuiUrl([string]$listenAddress) {
+  if ($listenAddress -match '^[a-z]+://') {
+    if ($listenAddress.EndsWith('/')) {
+      return $listenAddress
+    }
+
+    return $listenAddress + '/'
+  }
+
+  return 'http://' + $listenAddress + '/'
+}
+
+function Resolve-TailscaleGuiListenAddress([string]$fallbackListenAddress) {
+  if (-not $tailscaleMode) {
+    return $fallbackListenAddress
+  }
+
+  $tailscaleCommand = Get-Command tailscale.exe -ErrorAction SilentlyContinue
+
+  if ($tailscaleCommand -eq $null) {
+    $tailscaleCommand = Get-Command tailscale -ErrorAction SilentlyContinue
+  }
+
+  if ($tailscaleCommand -eq $null) {
+    Write-Warning "tailscale=1 was requested, but tailscale is not installed. Falling back to $fallbackListenAddress"
+    return $fallbackListenAddress
+  }
+
+  $tailscaleIp = (& $tailscaleCommand.Source ip -4 2>$null | Select-Object -First 1).Trim()
+
+  if ([string]::IsNullOrWhiteSpace($tailscaleIp)) {
+    Write-Warning "tailscale=1 was requested, but no Tailscale IPv4 address was detected. Falling back to $fallbackListenAddress"
+    return $fallbackListenAddress
+  }
+
+  $detectedListenAddress = "$tailscaleIp:8384"
+  Write-Host "Detected Tailscale GUI listen address: $detectedListenAddress"
+  return $detectedListenAddress
+}
+
+$guiListenAddress = Resolve-TailscaleGuiListenAddress $defaultGuiListenAddress
+$guiUrl = if ($tailscaleMode -and $guiListenAddress -ne $defaultGuiListenAddress) {
+  Resolve-GuiUrl $guiListenAddress
+} else {
+  $defaultGuiUrl
+}
 
 function Stop-InstalledSyncthingProcesses([string]$targetInstallDir) {
   $normalizedTarget = [System.IO.Path]::GetFullPath($targetInstallDir).TrimEnd('\\')
@@ -61,10 +113,10 @@ function Stop-InstalledSyncthingProcesses([string]$targetInstallDir) {
 }
 
 function Remove-SyncthingScheduledTask() {
-  & schtasks.exe /query /tn Syncthing | Out-Null 2>&1
+  & cmd.exe /d /c 'schtasks.exe /query /tn "Syncthing" >nul 2>&1'
 
   if ($LASTEXITCODE -eq 0) {
-    & schtasks.exe /delete /tn Syncthing /f | Out-Null
+    & cmd.exe /d /c 'schtasks.exe /delete /tn "Syncthing" /f >nul 2>&1'
   }
 }
 
@@ -119,7 +171,7 @@ $hidden = Join-Path $installDir "syncthing-hidden.vbs"
 
 @"
 Set shell = CreateObject("WScript.Shell")
-shell.Run """$($exe.FullName)"" serve --no-browser --no-restart --home ""$homeDir""", 0, False
+shell.Run """$($exe.FullName)"" serve --no-browser --no-restart --home ""$homeDir"" --gui-address ""$guiListenAddress""", 0, False
 "@ | Out-File $hidden -Encoding ASCII
 
 ${taskCommand}
@@ -167,7 +219,9 @@ $ErrorActionPreference = "Stop"
 $installDir = "${options.installDir}"
 $homeDir = ${windowsServiceHomeDirExpression()}
 $url = "${options.downloadURL}"
-$guiUrl = "http://127.0.0.1:8384/"
+$defaultGuiListenAddress = "${escapePowerShellString(options.guiListenAddress)}"
+$defaultGuiUrl = "${escapePowerShellString(options.guiURL)}"
+$tailscaleMode = ${options.tailscaleMode ? "$true" : "$false"}
 $openBrowser = ${options.openBrowser ? "$true" : "$false"}
 $serviceName = "${serviceName}"
 $serviceUser = "${serviceUser}"
@@ -176,6 +230,53 @@ $serviceCreateUser = ${options.serviceCreateUser ? "$true" : "$false"}
 $servicePaths = @(${servicePaths})
 $nssmZipUrl = "${escapePowerShellString(options.nssmZipUrl)}"
 $generatedPassword = $null
+
+function Resolve-GuiUrl([string]$listenAddress) {
+  if ($listenAddress -match '^[a-z]+://') {
+    if ($listenAddress.EndsWith('/')) {
+      return $listenAddress
+    }
+
+    return $listenAddress + '/'
+  }
+
+  return 'http://' + $listenAddress + '/'
+}
+
+function Resolve-TailscaleGuiListenAddress([string]$fallbackListenAddress) {
+  if (-not $tailscaleMode) {
+    return $fallbackListenAddress
+  }
+
+  $tailscaleCommand = Get-Command tailscale.exe -ErrorAction SilentlyContinue
+
+  if ($tailscaleCommand -eq $null) {
+    $tailscaleCommand = Get-Command tailscale -ErrorAction SilentlyContinue
+  }
+
+  if ($tailscaleCommand -eq $null) {
+    Write-Warning "tailscale=1 was requested, but tailscale is not installed. Falling back to $fallbackListenAddress"
+    return $fallbackListenAddress
+  }
+
+  $tailscaleIp = (& $tailscaleCommand.Source ip -4 2>$null | Select-Object -First 1).Trim()
+
+  if ([string]::IsNullOrWhiteSpace($tailscaleIp)) {
+    Write-Warning "tailscale=1 was requested, but no Tailscale IPv4 address was detected. Falling back to $fallbackListenAddress"
+    return $fallbackListenAddress
+  }
+
+  $detectedListenAddress = "$tailscaleIp:8384"
+  Write-Host "Detected Tailscale GUI listen address: $detectedListenAddress"
+  return $detectedListenAddress
+}
+
+$guiListenAddress = Resolve-TailscaleGuiListenAddress $defaultGuiListenAddress
+$guiUrl = if ($tailscaleMode -and $guiListenAddress -ne $defaultGuiListenAddress) {
+  Resolve-GuiUrl $guiListenAddress
+} else {
+  $defaultGuiUrl
+}
 
 function Resolve-LocalServiceUserName([string]$identity) {
   if ([string]::IsNullOrWhiteSpace($identity)) {
@@ -224,10 +325,10 @@ function Stop-InstalledSyncthingProcesses([string]$targetInstallDir) {
 }
 
 function Remove-SyncthingScheduledTask() {
-  & schtasks.exe /query /tn Syncthing | Out-Null 2>&1
+  & cmd.exe /d /c 'schtasks.exe /query /tn "Syncthing" >nul 2>&1'
 
   if ($LASTEXITCODE -eq 0) {
-    & schtasks.exe /delete /tn Syncthing /f | Out-Null
+    & cmd.exe /d /c 'schtasks.exe /delete /tn "Syncthing" /f >nul 2>&1'
   }
 }
 
@@ -236,16 +337,25 @@ function Download-File([string]$url, [string]$destinationPath) {
   Invoke-WebRequest $url -OutFile $destinationPath
 }
 
+function New-InstallerTempPath([string]$name) {
+  return Join-Path $env:TEMP ("syncthing-installer-" + [System.Guid]::NewGuid().ToString("N") + "-" + $name)
+}
+
 function Remove-TemporaryPath([string]$path) {
   if (-not (Test-Path $path)) {
     return
   }
 
-  try {
-    Remove-Item -Recurse -Force -ErrorAction Stop $path
-  } catch {
-    Write-Warning "临时文件清理失败，可稍后手动删除: $path"
+  for ($attempt = 0; $attempt -lt 5; $attempt++) {
+    try {
+      Remove-Item -Recurse -Force -ErrorAction Stop $path
+      return
+    } catch {
+      Start-Sleep -Milliseconds 400
+    }
   }
+
+  Write-Warning "临时文件清理失败，可稍后手动删除: $path"
 }
 
 Write-Host "安装 Syncthing (${options.variantLabel} / ${options.modeLabel}) 到 $installDir"
@@ -257,14 +367,15 @@ Stop-InstalledSyncthingProcesses $installDir
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 New-Item -ItemType Directory -Force -Path $homeDir | Out-Null
 
-$tmp = Join-Path $env:TEMP "syncthing.zip"
-$extractRoot = Join-Path $env:TEMP "syncthing-extract"
-$nssmZip = Join-Path $env:TEMP "nssm.zip"
-$nssmExtractRoot = Join-Path $env:TEMP "nssm-extract"
+$tmp = New-InstallerTempPath "syncthing.zip"
+$extractRoot = New-InstallerTempPath "syncthing-extract"
+$nssmZip = New-InstallerTempPath "nssm.zip"
+$nssmExtractRoot = New-InstallerTempPath "nssm-extract"
+$nssmRuntimePath = New-InstallerTempPath "nssm.exe"
 
 foreach ($path in @($extractRoot, $nssmExtractRoot)) {
   if (Test-Path $path) {
-    Remove-Item -Recurse -Force $path
+    Remove-TemporaryPath $path
   }
   New-Item -ItemType Directory -Force -Path $path | Out-Null
 }
@@ -292,6 +403,8 @@ if ($nssm -eq $null) {
   Write-Error "未找到 nssm.exe"
 }
 
+Copy-Item -Force $nssm.FullName $nssmRuntimePath
+
 if ($serviceCreateUser) {
   if ($serviceUser -eq "") {
     $serviceUser = ".\\syncthingsvc"
@@ -315,7 +428,7 @@ if ($serviceCreateUser) {
   }
 }
 
-$serviceArgs = '--no-restart --no-browser --home "' + $homeDir + '"'
+$serviceArgs = '--no-restart --no-browser --home "' + $homeDir + '" --gui-address "' + $guiListenAddress + '"'
 
 $existingService = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
 
@@ -325,17 +438,17 @@ if ($existingService -ne $null) {
     Start-Sleep -Seconds 2
   }
 
-  & $nssm.FullName remove $serviceName confirm
+  & $nssmRuntimePath remove $serviceName confirm
   Start-Sleep -Seconds 1
 }
 
-& $nssm.FullName install $serviceName $exe.FullName $serviceArgs
-& $nssm.FullName set $serviceName AppDirectory $installDir
-& $nssm.FullName set $serviceName Start SERVICE_AUTO_START
-& $nssm.FullName set $serviceName AppExit Default Exit
-& $nssm.FullName set $serviceName AppExit 0 Exit
-& $nssm.FullName set $serviceName AppExit 3 Restart
-& $nssm.FullName set $serviceName AppExit 4 Restart
+& $nssmRuntimePath install $serviceName $exe.FullName $serviceArgs
+& $nssmRuntimePath set $serviceName AppDirectory $installDir
+& $nssmRuntimePath set $serviceName Start SERVICE_AUTO_START
+& $nssmRuntimePath set $serviceName AppExit Default Exit
+& $nssmRuntimePath set $serviceName AppExit 0 Exit
+& $nssmRuntimePath set $serviceName AppExit 3 Restart
+& $nssmRuntimePath set $serviceName AppExit 4 Restart
 
 if ($serviceLogPath -ne "") {
   $serviceLogDir = Split-Path -Parent $serviceLogPath
@@ -344,8 +457,8 @@ if ($serviceLogPath -ne "") {
     New-Item -ItemType Directory -Force -Path $serviceLogDir | Out-Null
   }
 
-  & $nssm.FullName set $serviceName AppStdout $serviceLogPath
-  & $nssm.FullName set $serviceName AppStderr $serviceLogPath
+  & $nssmRuntimePath set $serviceName AppStdout $serviceLogPath
+  & $nssmRuntimePath set $serviceName AppStderr $serviceLogPath
 }
 
 if ($serviceUser -ne "") {
@@ -373,7 +486,7 @@ if ($serviceUser -ne "") {
     $passwordPlain = $generatedPassword
   }
 
-  & $nssm.FullName set $serviceName ObjectName $serviceUser $passwordPlain
+  & $nssmRuntimePath set $serviceName ObjectName $serviceUser $passwordPlain
   $passwordPlain = $null
   $generatedPassword = $null
 }
@@ -386,6 +499,7 @@ Remove-TemporaryPath $tmp
 Remove-TemporaryPath $nssmZip
 Remove-TemporaryPath $extractRoot
 Remove-TemporaryPath $nssmExtractRoot
+Remove-TemporaryPath $nssmRuntimePath
 
 if ($openBrowser) {
   Write-Host "等待 Syncthing service 启动并打开 Web 界面..."

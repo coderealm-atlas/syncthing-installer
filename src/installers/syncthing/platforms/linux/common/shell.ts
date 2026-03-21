@@ -1,6 +1,9 @@
 type LinuxShellOptions = {
   downloadURL: string
   installDir: string
+  guiListenAddress: string
+  guiURL: string
+  tailscaleMode: boolean
   openBrowser: boolean
   modeName: string
   serviceUser?: string
@@ -13,6 +16,9 @@ set -eu
 
 install_dir="${options.installDir}"
 download_url="${options.downloadURL}"
+gui_listen_address="${options.guiListenAddress}"
+gui_url="${options.guiURL}"
+tailscale_mode=${options.tailscaleMode ? "1" : "0"}
 mode_name="${options.modeName}"
 service_user_override="${options.serviceUser || ""}"
 open_browser=${options.openBrowser ? "1" : "0"}
@@ -25,6 +31,49 @@ cleanup() {
 }
 
 trap cleanup EXIT
+
+detect_host_os() {
+  uname -s 2>/dev/null || echo unknown
+}
+
+validate_host_os() {
+  local host_os
+
+  host_os="$(detect_host_os)"
+
+  if [ "$host_os" = "Linux" ]; then
+    return
+  fi
+
+  echo "This installer URL targets Linux, but detected host OS: $host_os" >&2
+  echo "Syncthing upstream provides official binaries for multiple Unix-like platforms. This installer now has separate Linux, FreeBSD, macOS and Windows runtimes, so please use the matching platform URL." >&2
+  echo "Please use a matching installer URL or install Syncthing on $host_os using the official package/binary for that OS." >&2
+  exit 1
+}
+
+configure_gui_address() {
+  local tailscale_ip
+
+  if [ "$tailscale_mode" != "1" ]; then
+    return
+  fi
+
+  if ! command -v tailscale >/dev/null 2>&1; then
+    echo "tailscale=1 was requested, but tailscale is not installed. Falling back to $gui_listen_address." >&2
+    return
+  fi
+
+  tailscale_ip="$(tailscale ip -4 2>/dev/null | head -n 1)"
+
+  if [ -z "$tailscale_ip" ]; then
+    echo "tailscale=1 was requested, but no Tailscale IPv4 address was detected. Falling back to $gui_listen_address." >&2
+    return
+  fi
+
+  gui_listen_address="$tailscale_ip:8384"
+  gui_url="http://$gui_listen_address/"
+  echo "Detected Tailscale GUI listen address: $gui_listen_address"
+}
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -115,8 +164,8 @@ wait_and_open_browser() {
   fi
 
   for _ in $(seq 1 20); do
-    if curl -fsS http://127.0.0.1:8384/ >/dev/null 2>&1; then
-      nohup xdg-open http://127.0.0.1:8384/ >/dev/null 2>&1 &
+    if curl -fsS "$gui_url" >/dev/null 2>&1; then
+      nohup xdg-open "$gui_url" >/dev/null 2>&1 &
       return
     fi
 
@@ -152,7 +201,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=$syncthing_bin serve --no-browser --no-restart --home=$state_dir
+ExecStart=$syncthing_bin serve --no-browser --no-restart --home=$state_dir --gui-address=$gui_listen_address
 WorkingDirectory=$install_dir
 Restart=on-failure
 RestartSec=5
@@ -164,7 +213,8 @@ WantedBy=default.target
 EOF
 
   run_user_systemctl daemon-reload
-  run_user_systemctl enable --now syncthing.service
+  run_user_systemctl enable syncthing.service
+  run_user_systemctl restart syncthing.service || run_user_systemctl start syncthing.service
 
   if [ "$mode_name" = "startup" ]; then
     if command -v sudo >/dev/null 2>&1; then
@@ -221,7 +271,7 @@ Wants=network-online.target
 [Service]
 User=$service_user
 Group=$service_group
-ExecStart=$service_exec_bin serve --no-browser --no-restart --home=$state_dir
+ExecStart=$service_exec_bin serve --no-browser --no-restart --home=$state_dir --gui-address=$gui_listen_address
 WorkingDirectory=$install_dir
 Restart=on-failure
 RestartSec=5
@@ -233,10 +283,14 @@ WantedBy=multi-user.target
 EOF
 
   systemctl daemon-reload
-  systemctl enable --now "$service_name"
+  systemctl enable "$service_name"
+  systemctl restart "$service_name" || systemctl start "$service_name"
 }
 
 echo "Installing Syncthing (${options.variantLabel}) to $install_dir"
+
+validate_host_os
+configure_gui_address
 
 require_command curl
 require_command tar

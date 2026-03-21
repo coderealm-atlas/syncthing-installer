@@ -28,6 +28,9 @@ export function parseInstallRequest(
   const platform = url.searchParams.get("platform") || "windows-amd64"
   const platformFamily = resolvePlatformFamily(platform)
   const mode = url.searchParams.get("mode") || "default"
+  const explicitListenOn = url.searchParams.get("listenon") || undefined
+  const guiListenAddress = normalizeListenOn(explicitListenOn)
+  const tailscaleMode = !explicitListenOn && url.searchParams.get("tailscale") === "1"
 
   if (!platformFamily) {
     return null
@@ -38,6 +41,9 @@ export function parseInstallRequest(
     action,
     platform,
     platformFamily,
+    guiListenAddress,
+    guiURL: buildGuiURL(guiListenAddress),
+    tailscaleMode,
     sourceName: url.searchParams.get("source") || "mirror",
     version: url.searchParams.get("version") || undefined,
     installDir: url.searchParams.get("dir") || defaultInstallDir(platformFamily, mode),
@@ -73,6 +79,10 @@ function resolvePlatformFamily(platform: string): PlatformFamily | null {
     return "linux"
   }
 
+  if (platform.startsWith("freebsd")) {
+    return "freebsd"
+  }
+
   if (platform.startsWith("macos") || platform.startsWith("darwin")) {
     return "macos"
   }
@@ -86,6 +96,8 @@ function defaultInstallDir(platformFamily: PlatformFamily, mode: string): string
       return "C:\\\\Syncthing"
     case "linux":
       return mode === "service" ? "/usr/local/lib/syncthing" : "$HOME/.local/lib/syncthing"
+    case "freebsd":
+      return mode === "service" ? "/usr/local/lib/syncthing" : "$HOME/.local/lib/syncthing"
     case "macos":
       return "/Applications/Syncthing"
   }
@@ -97,7 +109,53 @@ function defaultVariant(platformFamily: PlatformFamily): string {
       return "win11"
     case "linux":
       return "linux"
+    case "freebsd":
+      return "freebsd"
     case "macos":
       return "darwin"
   }
+}
+
+function normalizeListenOn(listenOn?: string): string {
+  const defaultAddress = "127.0.0.1:8384"
+
+  if (!listenOn) {
+    return defaultAddress
+  }
+
+  const trimmed = listenOn.trim()
+
+  if (!trimmed) {
+    return defaultAddress
+  }
+
+  if (trimmed === "*" || trimmed.toLowerCase() === "all") {
+    return "0.0.0.0:8384"
+  }
+
+  if (/^[a-z]+:\/\//i.test(trimmed)) {
+    return trimmed
+  }
+
+  if (trimmed.startsWith("[")) {
+    return trimmed.includes("]:") ? trimmed : `${trimmed}:8384`
+  }
+
+  if (trimmed.includes(":")) {
+    return trimmed
+  }
+
+  return `${trimmed}:8384`
+}
+
+function buildGuiURL(guiListenAddress: string): string {
+  if (/^[a-z]+:\/\//i.test(guiListenAddress)) {
+    return guiListenAddress.endsWith("/") ? guiListenAddress : `${guiListenAddress}/`
+  }
+
+  if (guiListenAddress === "0.0.0.0:8384" || guiListenAddress === "[::]:8384") {
+    return "http://127.0.0.1:8384/"
+  }
+
+  return `http://${guiListenAddress}/`
 }

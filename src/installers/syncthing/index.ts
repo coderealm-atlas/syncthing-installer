@@ -18,13 +18,31 @@ export async function buildSyncthingInstallScript(request: InstallRequest, env?:
 
   const runtime = resolvePlatformRuntime(request, env)
   const resolved = await resolveSourceAndVersion(request.sourceName, request.version, sources)
-  const downloadURL = buildDownloadURL(
+  let downloadURL = buildDownloadURL(
     resolved.source,
     resolved.version,
     request.platform,
     runtime.assetExtension,
     resolved.usedLatestPath
   )
+
+  if (request.sourceName === "mirror" && resolved.source === source) {
+    const hasMirroredAsset = await assetExists(downloadURL)
+
+    if (!hasMirroredAsset) {
+      const fallbackSource = sources.github
+
+      if (fallbackSource) {
+        downloadURL = buildDownloadURL(
+          fallbackSource,
+          resolved.version,
+          request.platform,
+          runtime.assetExtension,
+          false
+        )
+      }
+    }
+  }
 
   return runtime.buildScript(downloadURL, request)
 }
@@ -82,5 +100,34 @@ async function resolveSourceAndVersion(
       version: await resolveVersion(fallbackSource),
       usedLatestPath: false
     }
+  }
+}
+
+async function assetExists(url: string): Promise<boolean> {
+  try {
+    const headResponse = await fetch(url, {
+      method: "HEAD",
+      redirect: "follow"
+    })
+
+    if (headResponse.ok) {
+      return true
+    }
+
+    if (headResponse.status !== 403 && headResponse.status !== 405) {
+      return false
+    }
+
+    const getResponse = await fetch(url, {
+      method: "GET",
+      headers: {
+        Range: "bytes=0-0"
+      },
+      redirect: "follow"
+    })
+
+    return getResponse.ok || getResponse.status === 206
+  } catch {
+    return false
   }
 }
