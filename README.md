@@ -46,8 +46,6 @@ Worker 侧镜像域名通过 [wrangler.toml](wrangler.toml) 中的 `MIRROR_BASE_
 - Windows: `/syncthing/install.ps1`
 - Linux/macOS: `/syncthing/install.sh`
 
-当前同时兼容 `/syncthing-installer/...` 旧路径，但文档默认推荐使用更短的 `/syncthing/...`。
-
 示例：
 
 irm https://i.cjj365.cc/syncthing/install.ps1 | iex
