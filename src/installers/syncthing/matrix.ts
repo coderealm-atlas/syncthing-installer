@@ -1,12 +1,12 @@
-import { InstallRequest, PlatformRuntime } from "../../core/types"
+import { Env, InstallRequest, PlatformRuntime } from "../../core/types"
 import { resolveLinuxRuntime } from "./platforms/linux"
 import { resolveMacOSRuntime } from "./platforms/macos"
 import { resolveWindowsRuntime } from "./platforms/windows"
 
-export function resolvePlatformRuntime(request: InstallRequest): PlatformRuntime {
+export function resolvePlatformRuntime(request: InstallRequest, env?: Env): PlatformRuntime {
   switch (request.platformFamily) {
     case "windows":
-      return resolveWindowsRuntime(request)
+      return resolveWindowsRuntime(request, env)
     case "linux":
       return resolveLinuxRuntime(request)
     case "macos":

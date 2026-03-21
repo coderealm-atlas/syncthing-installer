@@ -1,9 +1,14 @@
 import { Env, InstallerConfig } from "../../core/types"
 
 const defaultMirrorBaseURL = "https://download.example.com/syncthing"
+const defaultMirroredNssmPath = "deps/nssm/nssm-2.24-101-g897c7ad.zip"
 
 export function getMirrorBaseURL(env?: Env): string {
   return (env?.MIRROR_BASE_URL || defaultMirrorBaseURL).replace(/\/$/, "")
+}
+
+export function getMirroredNssmZipURL(env?: Env): string {
+  return `${getMirrorBaseURL(env)}/${defaultMirroredNssmPath}`
 }
 
 export function getSyncthingSources(env?: Env): InstallerConfig["sources"] {

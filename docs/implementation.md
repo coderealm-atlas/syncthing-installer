@@ -82,5 +82,51 @@ schtasks /create /sc onlogon /tn Syncthing /tr "C:\Windows\System32\wscript.exe 
 - 会生成一个 VBS 包装脚本
 - 可以按需创建计划任务
 - 计划任务使用 `schtasks /create /sc onlogon`
+- 安装完成后会主动等待本地 Web GUI 就绪，并打开 `http://127.0.0.1:8384/`，便于首次初始化和触发防火墙放行提示
 
 还有一个实现细节值得继续对齐：当前生成的 VBS 命令行。只要已知 home 路径，Windows 包装脚本就应该显式带上该路径，这样运行行为才会与预期的用户级目录布局保持一致。
+
+## 关于 system service 模式
+
+Syncthing 官方文档明确提到，真正独立于用户登录的 Windows service 模式更适合服务器或无人值守场景，而不是普通桌面用户。
+
+原因主要有两点：
+
+- 这类模式通常需要借助 NSSM 之类的第三方工具来托管服务
+- 如果 GUI 和 REST API 没有正确加固，service 模式会放大权限与暴露面的风险
+
+因此当前安装器仍然把“用户登录后在后台启动”作为默认方案。对于绝大多数 Windows 桌面用户，这是更稳妥的选择。
+
+## 当前支持的 Windows 运行模式
+
+当前安装器对 Windows 提供三种模式：
+
+- `mode=default`：用户登录后通过任务计划程序在后台启动
+- `mode=startup`：通过任务计划程序在系统启动时启动
+- `mode=service`：使用 NSSM 安装为独立 Windows service
+
+其中：
+
+- `default` 仍然是普通桌面用户的推荐模式
+- `startup` 适合希望机器开机后即开始同步，但仍不想引入 Windows service 的场景
+- `service` 更接近服务器部署方式，适合长时间无人登录的机器
+
+`service` 模式当前会自动下载 NSSM，并用它把 Syncthing 注册为名为 `Syncthing` 的 Windows service。为了降低配置复杂度，当前脚本会先以 service 默认账户安装并启动，因此更需要在首次启动后尽快完成 GUI 安全设置。
+
+为了让这个模式更适合服务器场景，当前脚本还支持以下可选参数：
+
+- `service_name`：自定义 Windows service 名称
+- `service_user`：指定服务运行账号；脚本会在安装时交互式提示输入密码，而不是把密码放进 URL
+- `service_log`：配置 NSSM 的 stdout/stderr 输出文件
+- `service_create_user`：自动创建本地低权限账号，并用它运行 service
+- `service_paths`：为指定的数据目录授予 service 账号所需的修改权限
+
+如果同名 service 已存在，脚本会先尝试停止并移除旧 service，然后再按新的参数重新安装。
+
+如果启用了 `service_create_user=1`，当前脚本会：
+
+- 自动创建一个本地普通用户账号
+- 把安装目录、配置目录、日志目录和 `service_paths` 指定目录的 ACL 授给这个账号
+- 再用该账号配置 NSSM service
+
+这样可以避免直接使用管理员账号或默认的 `LocalSystem`。

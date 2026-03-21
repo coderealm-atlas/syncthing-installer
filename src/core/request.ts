@@ -41,6 +41,15 @@ export function parseInstallRequest(
     version: url.searchParams.get("version") || undefined,
     installDir: url.searchParams.get("dir") || defaultInstallDir(platformFamily),
     createTask: url.searchParams.get("task") !== "0",
+    openBrowser: url.searchParams.get("open") !== "0",
+    serviceName: url.searchParams.get("service_name") || undefined,
+    serviceUser: url.searchParams.get("service_user") || undefined,
+    serviceLogPath: url.searchParams.get("service_log") || undefined,
+    serviceCreateUser: url.searchParams.get("service_create_user") === "1",
+    servicePaths: (url.searchParams.get("service_paths") || "")
+      .split(";")
+      .map((item) => item.trim())
+      .filter(Boolean),
     variant: url.searchParams.get("variant") || defaultVariant(platformFamily),
     mode: url.searchParams.get("mode") || "default"
   }

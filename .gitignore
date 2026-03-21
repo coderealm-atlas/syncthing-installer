@@ -9,6 +9,7 @@ coverage/
 
 sync/data/
 sync/config/env
+sync/config/env.local
 
 .DS_Store
 *.log

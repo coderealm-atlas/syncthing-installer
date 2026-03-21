@@ -1,3 +1,6 @@
-export function buildScheduledTaskCommand(hiddenScriptPath: string): string {
-  return `schtasks /create /sc onlogon /tn Syncthing /tr "C:\\Windows\\System32\\wscript.exe \"${hiddenScriptPath}\"" /f`
+export function buildScheduledTaskCommand(hiddenScriptPath: string, schedule: "onlogon" | "onstart"): string {
+  return [
+    '$taskTarget = "`"$wscriptPath`" `"$hidden`""',
+    `& schtasks.exe /create /sc ${schedule} /tn Syncthing /tr $taskTarget /f`
+  ].join("\n")
 }

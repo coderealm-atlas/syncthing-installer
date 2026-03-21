@@ -3,8 +3,13 @@ name = "syncthing-installer"
 main = "src/worker.ts"
 compatibility_date = "2026-03-20"
 
+[[routes]]
+pattern = "i.lets-script.com"
+custom_domain = true
+zone_name = "lets-script.com"
+
 [vars]
-MIRROR_BASE_URL = "https://download.example.com/syncthing"
+MIRROR_BASE_URL = "https://dl.cjj365.cc/syncthing"
 
 [[durable_objects.bindings]]
 name = "STATS_COUNTER"

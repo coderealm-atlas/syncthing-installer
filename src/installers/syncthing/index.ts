@@ -16,7 +16,7 @@ export async function buildSyncthingInstallScript(request: InstallRequest, env?:
     throw new Error("Unknown source")
   }
 
-  const runtime = resolvePlatformRuntime(request)
+  const runtime = resolvePlatformRuntime(request, env)
   const resolved = await resolveSourceAndVersion(request.sourceName, request.version, sources)
   const downloadURL = buildDownloadURL(
     resolved.source,

@@ -3,6 +3,32 @@ ensure_directory() {
   mkdir -p "$dir"
 }
 
+curl_with_proxy() {
+  local -a curl_args
+
+  curl_args=()
+
+  if [ -n "${CURL_PROXY:-}" ]; then
+    curl_args+=(--proxy "$CURL_PROXY")
+  elif [ -n "${HTTPS_PROXY:-}" ]; then
+    curl_args+=(--proxy "$HTTPS_PROXY")
+  elif [ -n "${https_proxy:-}" ]; then
+    curl_args+=(--proxy "$https_proxy")
+  elif [ -n "${ALL_PROXY:-}" ]; then
+    curl_args+=(--proxy "$ALL_PROXY")
+  elif [ -n "${all_proxy:-}" ]; then
+    curl_args+=(--proxy "$all_proxy")
+  fi
+
+  if [ -n "${NO_PROXY:-}" ]; then
+    curl_args+=(--noproxy "$NO_PROXY")
+  elif [ -n "${no_proxy:-}" ]; then
+    curl_args+=(--noproxy "$no_proxy")
+  fi
+
+  curl "${curl_args[@]}" "$@"
+}
+
 reset_directory() {
   local dir="$1"
 
@@ -24,7 +50,7 @@ download_file() {
   local target_path="$2"
   local temp_path="${target_path}.tmp"
 
-  curl -fL --retry 3 --retry-delay 2 --retry-connrefused "$url" -o "$temp_path"
+  curl_with_proxy -fL --retry 3 --retry-delay 2 --retry-connrefused "$url" -o "$temp_path"
   mv "$temp_path" "$target_path"
 }
 
@@ -32,6 +58,12 @@ sha256_file() {
   local file_path="$1"
 
   sha256sum "$file_path" | awk '{print $1}'
+}
+
+file_size_bytes() {
+  local file_path="$1"
+
+  stat -c%s "$file_path"
 }
 
 write_json_file() {

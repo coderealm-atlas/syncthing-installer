@@ -13,15 +13,27 @@
 1. 用 `bin/fetch-assets.sh` 拉取 GitHub Release 资源到本地目录
 2. 用 `bin/sync-assets.sh` 将本地目录同步到中国服务器
 
+如果要完全避开“中转主机到下载主机”的链路，也可以走一条独立路径：
+
+1. 把同步程序直接部署到 `dl.cjj365.cc`
+2. 用代理从 GitHub 拉取资源
+3. 直接写入 Nginx 服务目录
+
 当前实现优先支持 `rsync over SSH`，适合“先下载到目录，再发布到中国服务器”的流程。
 
 另外也提供了一个面向 Ubuntu 24 的部署脚本，用于把整个 `sync/` 目录上传到远端服务器，并安装 `systemd service + timer`。
+
+本目录现在包含两套互不依赖的方案：
+
+- 跨主机方案：`fetch-assets.sh` + `sync-assets.sh` + `deploy-sync-ubuntu24.sh`
+- 本机直写方案：`fetch-assets-local.sh` + `publish-assets-local.sh` + `deploy-local-sync-ubuntu24.sh`
 
 ## 当前能力
 
 - 拉取最近多个 GitHub releases
 - 按需过滤 asset 名称，便于只同步 Windows 安装包
 - 为已下载文件跳过重复下载
+- 已存在但大小不匹配的文件会自动重新下载
 - 生成 `manifest.json`
 - 生成 `releases.json` 和 `latest.json`
 - 使用 `rsync` 做 dry-run 或正式发布
@@ -37,6 +49,7 @@
 - `KEEP_VERSIONS`：本地保留的版本目录数量
 - `SYNC_PROFILE`：同步预设，当前支持 `windows` 和 `all`
 - `ASSET_MATCH`：可选自定义文件名正则；为空时会按 `SYNC_PROFILE` 自动选择
+- `FORCE_DOWNLOAD=1`：忽略本地已有文件，强制重新从 GitHub 下载
 - `MIRROR_BASE_URL`：镜像站对外根路径，用于和 Worker 配置保持一致
 - `REMOTE_HOST` / `REMOTE_USER` / `REMOTE_PATH`
 - `REMOTE_PORT`
@@ -47,7 +60,21 @@
 - `SYNC_DEPLOY_BASE_DIR`：远端安装目录
 - `SYNC_SYSTEMD_NAME_PREFIX`：systemd service/timer 名称前缀
 - `SYNC_RUN_USER` / `SYNC_RUN_GROUP`：远端执行同步任务的用户和组
+
+`SYNC_RUN_USER` 需要具备到 `REMOTE_USER@REMOTE_HOST` 的 SSH 发布权限；如果发布密钥只在某个现有登录用户下，最简单的做法就是直接让 `systemd` 以那个用户运行。
 - `SYNC_TIMER_ON_CALENDAR`：systemd timer 的计划，例如 `hourly` 或 `*-*-* 03:00:00`
+
+如果使用本机直写方案，复制 `config/env.local.example` 为 `config/env.local`，常用变量如下：
+
+- `LOCAL_PUBLISH_PATH`：Nginx 直接服务的目录，例如 `/var/www/downloads/syncthing`
+- `LOCAL_STAGE_ROOT`：可选，本地 staging 目录；不设置时自动使用临时目录
+- `LOCAL_DRY_RUN=1`：只预览本地发布变更，不真正写入 Nginx 目录
+- `LOCAL_DEPLOY_HOST` / `LOCAL_DEPLOY_USER` / `LOCAL_DEPLOY_PORT`
+- `LOCAL_DEPLOY_BASE_DIR`：本机直写方案在目标机上的安装目录
+- `LOCAL_SYSTEMD_NAME_PREFIX`：本机直写方案的 systemd service/timer 名前缀
+- `LOCAL_RUN_USER` / `LOCAL_RUN_GROUP`：在 `dl.cjj365.cc` 上执行同步任务、并写入 `LOCAL_PUBLISH_PATH` 的用户和组
+- `LOCAL_TIMER_ON_CALENDAR`：本机直写方案的计划时间
+- `CURL_PROXY` / `NO_PROXY`：如果目标机访问 GitHub 需要代理，在这里配置
 
 ## 产出文件
 
@@ -76,6 +103,8 @@ latest/
 - 让远端站点不需要自己做目录扫描或软链接切换
 
 这些文件可以直接给下载页、Worker 或镜像站点读取，不需要额外扫描目录。
+
+本机直写方案发布到 `LOCAL_PUBLISH_PATH` 后，对外目录结构保持一致，因此 Worker 侧的 `MIRROR_BASE_URL` 不需要因为部署方式变化而调整。
 
 ## 执行示例
 
@@ -107,6 +136,8 @@ DRY_RUN=1 ./sync/bin/sync-assets.sh
 - `curl`
 - `jq`
 
+如果 `SYNC_RUN_USER` 或 `SYNC_RUN_GROUP` 在远端不存在，部署脚本也会自动创建对应的系统用户和用户组。
+
 执行方式：
 
 ```bash
@@ -132,3 +163,60 @@ cp sync/config/env.example sync/config/env
 ```bash
 ssh deploy@your-server 'sudo systemctl start syncthing-installer-sync.service'
 ```
+
+## 本机直写方案
+
+这条路径用于解决“中转主机和下载主机之间链路太差”的问题。
+
+思路是：
+
+1. 直接把同步程序部署到 `dl.cjj365.cc`
+2. 目标机自己通过代理访问 GitHub API 和资产下载地址
+3. 下载结果直接发布到 Nginx 服务目录
+
+执行方式：
+
+```bash
+cp sync/config/env.local.example sync/config/env.local
+# 编辑 sync/config/env.local，填写代理、Nginx 目录和部署目标
+./sync/bin/deploy-local-sync-ubuntu24.sh
+```
+
+手动执行一次本机直写同步：
+
+```bash
+ssh deploy@dl.cjj365.cc 'sudo systemctl start syncthing-installer-local-sync.service'
+```
+
+如果只想在目标机本地跑抓取和发布，不重新部署 service：
+
+```bash
+./sync/bin/fetch-assets-local.sh
+./sync/bin/publish-assets-local.sh
+```
+
+本机直写方案依赖：
+
+- `curl`
+- `jq`
+- `rsync`
+
+其中 `rsync` 只用于目标机本地目录同步，不再走跨主机 SSH 发布。
+
+## 手动同步 NSSM
+
+Windows `mode=service` 还依赖一个额外文件：NSSM ZIP。
+
+考虑到 NSSM 更新频率很低，而且中国网络下访问境外源并不稳定，当前建议直接在 `dl.cjj365.cc` 上手动执行一次：
+
+```bash
+./sync/bin/fetch-nssm-local.sh
+```
+
+这个脚本会读取 `config/env.local`，并把 NSSM 发布到：
+
+```text
+${LOCAL_PUBLISH_PATH}/deps/nssm/nssm-2.24-101-g897c7ad.zip
+```
+
+Worker 的 Windows service 安装脚本会直接使用镜像地址下载这个文件，不再依赖境外 NSSM 源。

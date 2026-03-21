@@ -26,6 +26,12 @@ export type InstallRequest = {
   version?: string
   installDir: string
   createTask: boolean
+  openBrowser: boolean
+  serviceName?: string
+  serviceUser?: string
+  serviceLogPath?: string
+  serviceCreateUser: boolean
+  servicePaths: string[]
   variant: string
   mode: string
 }

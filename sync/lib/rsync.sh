@@ -25,3 +25,25 @@ deploy_directory_with_rsync() {
   ssh "${ssh_args[@]}" "${remote_user}@${remote_host}" "mkdir -p '$remote_path'"
   rsync "${rsync_args[@]}" "$source_dir"/ "${remote_user}@${remote_host}:${remote_path}/"
 }
+
+deploy_directory_locally() {
+  local source_dir="$1"
+  local target_dir="$2"
+  local dry_run="$3"
+
+  local -a rsync_args
+
+  rsync_args=(
+    -av
+    --delete
+    --delay-updates
+    --safe-links
+  )
+
+  if [ "$dry_run" = "1" ]; then
+    rsync_args+=(--dry-run --itemize-changes)
+  fi
+
+  mkdir -p "$target_dir"
+  rsync "${rsync_args[@]}" "$source_dir"/ "$target_dir"/
+}
