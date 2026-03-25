@@ -56,12 +56,15 @@
 - `DRY_RUN=1`：只预览 `rsync` 变更，不真正上传
 - `PUBLISH_LAYOUT=versioned`：发布为固定结构，包含 `releases/` 和 `latest/`
 - `STAGE_ROOT`：可选，指定本地 staging 目录；不设置时自动用临时目录
+- `SYNC_REFRESH_PUBLISH_HOST_KEY=1`：当发布目标机 SSH host key 已轮换时，部署时自动刷新 `SYNC_RUN_USER` 的 `known_hosts`；默认 `0`
 - `SYNC_DEPLOY_HOST` / `SYNC_DEPLOY_USER` / `SYNC_DEPLOY_PORT`：部署 sync 程序到 Ubuntu 24 的 SSH 目标
 - `SYNC_DEPLOY_BASE_DIR`：远端安装目录
 - `SYNC_SYSTEMD_NAME_PREFIX`：systemd service/timer 名称前缀
 - `SYNC_RUN_USER` / `SYNC_RUN_GROUP`：远端执行同步任务的用户和组
 
 `SYNC_RUN_USER` 需要具备到 `REMOTE_USER@REMOTE_HOST` 的 SSH 发布权限；如果发布密钥只在某个现有登录用户下，最简单的做法就是直接让 `systemd` 以那个用户运行。
+
+注意：SSH host key 校验是针对 `REMOTE_HOST`，不是针对 `REMOTE_USER`。把 `root` 改成 `ecs-user` 不会消除 `known_hosts` 里的旧主机指纹；如果目标机重装或更换了 SSH key，需要清理 `SYNC_RUN_USER` 对应账号下的旧条目，或临时设置 `SYNC_REFRESH_PUBLISH_HOST_KEY=1` 后重新部署一次。
 - `SYNC_TIMER_ON_CALENDAR`：systemd timer 的计划，例如 `hourly` 或 `*-*-* 03:00:00`
 
 如果使用本机直写方案，复制 `config/env.local.example` 为 `config/env.local`，常用变量如下：
@@ -73,7 +76,7 @@
 - `LOCAL_DEPLOY_BASE_DIR`：本机直写方案在目标机上的安装目录
 - `LOCAL_SYSTEMD_NAME_PREFIX`：本机直写方案的 systemd service/timer 名前缀
 - `LOCAL_RUN_USER` / `LOCAL_RUN_GROUP`：在 `dl.cjj365.cc` 上执行同步任务、并写入 `LOCAL_PUBLISH_PATH` 的用户和组
-- `LOCAL_TIMER_ON_CALENDAR`：本机直写方案的计划时间
+- `LOCAL_TIMER_ON_CALENDAR`：本机直写方案的计划时间。默认值建议设为北京时间凌晨窗口内的单次执行，例如 `*-*-* 03:00:00 Asia/Shanghai`
 - `CURL_PROXY` / `NO_PROXY`：如果目标机访问 GitHub 需要代理，在这里配置
 
 ## 产出文件
@@ -158,6 +161,11 @@ cp sync/config/env.example sync/config/env
 - `systemctl list-timers <timer>`
 - 最近 20 行 service 日志
 
+如果部署阶段就发现发布目标机的 SSH host key 与远端 `known_hosts` 记录不一致，当前脚本会直接失败，避免出现“部署成功但 timer 首次运行即失败”的状态。确认目标机确实完成了合法 host key 轮换后，可以：
+
+- 手动删除远端 `SYNC_RUN_USER` 的旧 `known_hosts` 条目
+- 或者把 `SYNC_REFRESH_PUBLISH_HOST_KEY=1` 写入 `sync/config/env`，重新执行一次部署
+
 手动触发一次同步：
 
 ```bash
@@ -179,6 +187,7 @@ ssh deploy@your-server 'sudo systemctl start syncthing-installer-sync.service'
 ```bash
 cp sync/config/env.local.example sync/config/env.local
 # 编辑 sync/config/env.local，填写代理、Nginx 目录和部署目标
+# 默认会在北京时间每天 03:00 执行一次；如果要改时间，调整 LOCAL_TIMER_ON_CALENDAR
 ./sync/bin/deploy-local-sync-ubuntu24.sh
 ```
 

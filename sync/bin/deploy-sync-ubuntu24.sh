@@ -17,6 +17,7 @@ deploy_systemd_prefix="${SYNC_SYSTEMD_NAME_PREFIX:-syncthing-installer-sync}"
 deploy_run_user="${SYNC_RUN_USER:-$deploy_user}"
 deploy_run_group="${SYNC_RUN_GROUP:-$deploy_run_user}"
 deploy_schedule="${SYNC_TIMER_ON_CALENDAR:-hourly}"
+refresh_publish_host_key="${SYNC_REFRESH_PUBLISH_HOST_KEY:-0}"
 
 if [ -z "$deploy_host" ] || [ -z "$deploy_user" ]; then
   log_error "SYNC_DEPLOY_HOST and SYNC_DEPLOY_USER are required"
@@ -78,7 +79,7 @@ WantedBy=timers.target
 EOF
 
 log_info "prepare remote directories on $remote_target"
-ssh -p "$deploy_port" "$remote_target" "bash -s -- '$deploy_base_dir' '$deploy_run_user' '$deploy_run_group' '$remote_sync_dir' '${REMOTE_HOST:-}' '${REMOTE_PORT:-22}'" <<'EOF'
+ssh -p "$deploy_port" "$remote_target" "bash -s -- '$deploy_base_dir' '$deploy_run_user' '$deploy_run_group' '$remote_sync_dir' '${REMOTE_HOST:-}' '${REMOTE_PORT:-22}' '$refresh_publish_host_key'" <<'EOF'
 set -eu
 
 deploy_base_dir="$1"
@@ -87,6 +88,7 @@ deploy_run_group="$3"
 remote_sync_dir="$4"
 publish_host="$5"
 publish_port="$6"
+refresh_publish_host_key="$7"
 
 . /etc/os-release
 
@@ -122,12 +124,54 @@ sudo chown -R "$deploy_run_user:$deploy_run_group" "$deploy_base_dir"
 
 if [ -n "$publish_host" ]; then
   run_user_home="$(getent passwd "$deploy_run_user" | cut -d: -f6)"
+  known_hosts_path="$run_user_home/.ssh/known_hosts"
+  current_keys_file="$(mktemp)"
+  existing_keys_file="$(mktemp)"
+  normalized_current_keys_file="$(mktemp)"
+  normalized_existing_keys_file="$(mktemp)"
+  known_host_lookup="$publish_host"
+
+  cleanup_ssh_hostkey_files() {
+    rm -f "$current_keys_file" "$existing_keys_file" "$normalized_current_keys_file" "$normalized_existing_keys_file"
+  }
+
+  trap cleanup_ssh_hostkey_files EXIT
+
   sudo -u "$deploy_run_user" mkdir -p "$run_user_home/.ssh"
   sudo chmod 700 "$run_user_home/.ssh"
-  sudo touch "$run_user_home/.ssh/known_hosts"
-  sudo chmod 600 "$run_user_home/.ssh/known_hosts"
-  if ! sudo -u "$deploy_run_user" ssh-keygen -F "$publish_host" >/dev/null 2>&1; then
-    sudo -u "$deploy_run_user" ssh-keyscan -p "$publish_port" "$publish_host" >> "$run_user_home/.ssh/known_hosts"
+  sudo touch "$known_hosts_path"
+  sudo chmod 600 "$known_hosts_path"
+
+  if [ "$publish_port" != "22" ]; then
+    known_host_lookup="[$publish_host]:$publish_port"
+  fi
+
+  ssh-keyscan -p "$publish_port" "$publish_host" > "$current_keys_file" 2>/dev/null
+
+  if [ ! -s "$current_keys_file" ]; then
+    echo "Failed to fetch SSH host key for $known_host_lookup" >&2
+    exit 1
+  fi
+
+  sort -u "$current_keys_file" > "$normalized_current_keys_file"
+
+  if ssh-keygen -F "$known_host_lookup" -f "$known_hosts_path" > "$existing_keys_file" 2>/dev/null; then
+    grep -v '^#' "$existing_keys_file" > "$existing_keys_file.filtered"
+    mv "$existing_keys_file.filtered" "$existing_keys_file"
+    sort -u "$existing_keys_file" > "$normalized_existing_keys_file"
+
+    if ! cmp -s "$normalized_existing_keys_file" "$normalized_current_keys_file"; then
+      if [ "$refresh_publish_host_key" = "1" ]; then
+        ssh-keygen -R "$known_host_lookup" -f "$known_hosts_path" >/dev/null 2>&1 || true
+        sudo -u "$deploy_run_user" sh -c "cat '$current_keys_file' >> '$known_hosts_path'"
+      else
+        echo "SSH host key mismatch for $known_host_lookup in $known_hosts_path" >&2
+        echo "Remove the stale key manually or redeploy with SYNC_REFRESH_PUBLISH_HOST_KEY=1" >&2
+        exit 1
+      fi
+    fi
+  else
+    sudo -u "$deploy_run_user" sh -c "cat '$current_keys_file' >> '$known_hosts_path'"
   fi
 fi
 EOF

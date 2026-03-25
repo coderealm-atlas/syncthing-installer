@@ -16,7 +16,7 @@ deploy_base_dir="${LOCAL_DEPLOY_BASE_DIR:-/opt/syncthing-installer-local-sync}"
 deploy_systemd_prefix="${LOCAL_SYSTEMD_NAME_PREFIX:-syncthing-installer-local-sync}"
 deploy_run_user="${LOCAL_RUN_USER:-$deploy_user}"
 deploy_run_group="${LOCAL_RUN_GROUP:-$deploy_run_user}"
-deploy_schedule="${LOCAL_TIMER_ON_CALENDAR:-hourly}"
+deploy_schedule="${LOCAL_TIMER_ON_CALENDAR:-*-*-* 03:00:00 Asia/Shanghai}"
 local_publish_path="${LOCAL_PUBLISH_PATH:-}"
 
 if [ -z "$deploy_host" ] || [ -z "$deploy_user" ] || [ -z "$local_publish_path" ]; then
@@ -38,6 +38,8 @@ fi
 
 service_name="${deploy_systemd_prefix}.service"
 timer_name="${deploy_systemd_prefix}.timer"
+# Manual run on target host after deployment:
+#   sudo systemctl start ${deploy_systemd_prefix}.service
 remote_target="${deploy_user}@${deploy_host}"
 remote_sync_dir="$deploy_base_dir/sync"
 remote_env_path="$remote_sync_dir/config/env.local"
